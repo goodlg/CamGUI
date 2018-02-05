@@ -1,36 +1,112 @@
 apply plugin: 'com.android.application'
+apply from: "$rootDir/config.gradle"
 
 android {
-    compileSdkVersion 26
+    compileSdkVersion versions.complieSdk
+    buildToolsVersion versions.buildTools
+
     defaultConfig {
-        applicationId "org.ftd.gyn.camgui"
-        minSdkVersion 16
-        targetSdkVersion 26
-        versionCode 1
-        versionName "1.0"
+        applicationId appConfig.appId
+        minSdkVersion versions.minSdk
+        targetSdkVersion versions.targetSdk
+        versionCode getVersionCode(true)
+        versionName getVersionName(true)
+        flavorDimensions "versionCode"
+
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
                 cppFlags ""
-                abiFilters 'armeabi'
             }
         }
     }
 
+    lintOptions {
+        abortOnError false
+    }
+
     signingConfigs {
+        debug {
+            try {
+                keyAlias appConfig.keyAlias
+                keyPassword appConfig.keyPassword
+                storeFile file(appConfig.asStoreFile)
+                storePassword appConfig.storePassword
+            }catch (ex) {
+                throw new InvalidUserDataException(ex.toString())
+            }
+        }
+
         release {
-            storeFile file("as_keystore.jks")
-            storePassword 'Aa123456'
-            keyAlias 'as_keys0'
-            keyPassword 'Aa123456'
+            try {
+                keyAlias appConfig.keyAlias
+                keyPassword appConfig.keyPassword
+                storeFile file(appConfig.sysStoreFile)
+                storePassword appConfig.storePassword
+            }catch (ex) {
+                throw new InvalidUserDataException(ex.toString())
+            }
         }
     }
 
     buildTypes {
         release {
-            minifyEnabled false
+            buildConfigField 'boolean', 'IS_DEBUG', 'false'
+            debuggable false
+            zipAlignEnabled true
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
+        }
+
+        debug {
+            applicationIdSuffix '.debug'
+            buildConfigField 'boolean', 'IS_DEBUG', 'true'
+            debuggable true
+            zipAlignEnabled true
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.debug
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    applicationVariants.all {
+        variant ->
+            variant.outputs.all {
+                if (variant.buildType.name == 'release') {
+                    variant.mergedFlavor.versionCode = getVersionCode(false)
+                    variant.mergedFlavor.versionName = getVersionName(false)
+                    // release
+                    outputFileName = "${getApkName(false)}.apk";
+                } else {
+                    variant.mergedFlavor.versionCode = getVersionCode(true)
+                    variant.mergedFlavor.versionName = getVersionName(true)
+                    // debug
+                    outputFileName = "${project.getName()}_${buildType.name}.apk";
+                }
+            }
+    }
+
+    productFlavors {
+        Beta {
+            buildConfigField "String", "API_BETA", "\"$appConfig.betaAPI\""
+            applicationId appConfig.appId + ".beta"
+            manifestPlaceholders = [APP_NAME: appConfig.betaName,
+                                    APP_LOGO: appConfig.betaLogo,
+                                    APP_PACKAGE : appConfig.appId,
+                                    UID     : appConfig.asUid
+            ]
+        }
+
+        RC {
+            buildConfigField "String", "API_RC", "\"$appConfig.rcAPI\""
+            applicationId appConfig.appId
+            manifestPlaceholders = [APP_NAME: appConfig.rcName,
+                                    APP_LOGO: appConfig.rcLogo,
+                                    APP_PACKAGE : appConfig.appId,
+                                    UID     : appConfig.sysUid
+            ]
         }
     }
 
@@ -56,3 +132,52 @@ dependencies {
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.1'
     implementation project(':camlibrary')
 }
+
+// version code
+static def getVersionCode(boolean isDebug) {
+    if (isDebug) {
+        return Integer.parseInt(new Date().format("yyMMddHHmm"))
+    }
+    return getRevisionNumber()
+}
+
+// version name
+def getVersionName(boolean isDebug) {
+    String version = appConfig.appmajor +
+            '.' + appConfig.appminor +
+            '.' + getRevisionNumber()
+    String today = new Date().format('yyMMdd')
+    String time = new Date().format('HHmmss')
+    if (isDebug) {
+        return version + ".$today.$time." + getRevisionDescription()
+    }
+    return version + ".$today." + getRevisionDescription()
+}
+
+// git submissions
+static def getRevisionNumber() {
+    Process process = "git rev-list --count HEAD".execute()
+    process.waitFor()
+    return process.getText().toInteger()
+}
+
+// git last commit 6
+static def getRevisionDescription() {
+    String desc = 'git describe --always'.execute().getText().trim()
+    return (desc == null || desc.size() == 0) ? new Date().format("yyMMdd") : desc.substring(0, 6)
+}
+
+// apk name
+def getApkName(boolean isDebug) {
+    String version = appConfig.appId +
+            '-' + appConfig.appmajor +
+            '.' + appConfig.appminor +
+            '.' + getRevisionNumber()
+    String today = new Date().format('yyMMdd')
+    String time = new Date().format('HHmmss')
+    if (isDebug) {
+        return version + "-$today-$time." + getRevisionDescription()
+    }
+    return version + "-$today-" + getRevisionDescription()
+}
+
