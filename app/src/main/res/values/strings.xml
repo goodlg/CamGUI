@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">CamGUI</string>
+
+    <string name="blank"></string>
+    <string name="stat">status</string>
+    <string name="camId">Camera Id</string>
+    <string name="camera_id">Camera id</string>
+    <string name="open">open</string>
+    <string name="close">close</string>
+
+</resources>
